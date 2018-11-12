@@ -16,22 +16,45 @@
 
 package com.jaredrummler.android.colorpicker;
 
-import android.app.*;
-import android.content.*;
-import android.content.res.*;
-import android.graphics.*;
-import android.os.*;
-import android.support.annotation.*;
-import android.support.v4.graphics.*;
-import android.support.v7.app.AlertDialog;
-import android.text.*;
-import android.util.*;
-import android.view.*;
-import android.view.View.*;
-import android.view.inputmethod.*;
-import android.widget.*;
+import android.app.Activity;
+import android.app.Dialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.res.TypedArray;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
+import android.os.Bundle;
+import android.text.Editable;
+import android.text.InputFilter;
+import android.text.TextWatcher;
+import android.util.Log;
+import android.util.TypedValue;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.View.OnTouchListener;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.GridView;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.TextView;
 
-import java.util.*;
+import java.util.Arrays;
+import java.util.Locale;
+
+import androidx.annotation.ColorInt;
+import androidx.annotation.IntDef;
+import androidx.annotation.NonNull;
+import androidx.annotation.StringRes;
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.graphics.ColorUtils;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.FragmentActivity;
 
 /**
  * <p>A dialog to pick a color.</p>
@@ -44,28 +67,14 @@ import java.util.*;
  *   ColorPickerDialog.newBuilder().show(activity);
  * </pre>
  */
-public class ColorPickerDialog extends DialogFragment implements OnTouchListener,
+public class ColorPickerDialog extends DialogFragment implements
         ColorPickerView.OnColorChangedListener, TextWatcher {
 
-    private static final String ARG_ID = "id";
-    private static final String ARG_TYPE = "dialogType";
-    private static final String ARG_COLOR = "color";
-    private static final String ARG_ALPHA = "alpha";
-    private static final String ARG_PRESETS = "presets";
-    private static final String ARG_ALLOW_PRESETS = "allowPresets";
-    private static final String ARG_ALLOW_CUSTOM = "allowCustom";
-    private static final String ARG_DIALOG_TITLE = "dialogTitle";
-    private static final String ARG_SHOW_COLOR_SHADES = "showColorShades";
-    private static final String ARG_COLOR_SHAPE = "colorShape";
-    private static final String ARG_PRESETS_BUTTON_TEXT = "presetsButtonText";
-    private static final String ARG_CUSTOM_BUTTON_TEXT = "customButtonText";
-    private static final String ARG_SELECTED_BUTTON_TEXT = "selectedButtonText";
-    private static final String ARG_SHOW_NEGATIVE_BUTTON = "showNegativeButton";
+    private static final String TAG = "ColorPickerDialog";
 
     public static final int TYPE_CUSTOM = 0;
     public static final int TYPE_PRESETS = 1;
 
-    static final int ALPHA_THRESHOLD = 165;
 
     /**
      * Material design colors used as the default color presets
@@ -92,14 +101,22 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
             0xFF9E9E9E, // GREY 500
     };
 
-    /**
-     * Create a new Builder for creating a {@link ColorPickerDialog} instance
-     *
-     * @return The {@link Builder builder} to create the {@link ColorPickerDialog}.
-     */
-    public static Builder newBuilder() {
-        return new Builder();
-    }
+    static final int ALPHA_THRESHOLD = 165;
+
+    private static final String ARG_ID = "id";
+    private static final String ARG_TYPE = "dialogType";
+    private static final String ARG_COLOR = "color";
+    private static final String ARG_ALPHA = "alpha";
+    private static final String ARG_PRESETS = "presets";
+    private static final String ARG_ALLOW_PRESETS = "allowPresets";
+    private static final String ARG_ALLOW_CUSTOM = "allowCustom";
+    private static final String ARG_DIALOG_TITLE = "dialogTitle";
+    private static final String ARG_SHOW_COLOR_SHADES = "showColorShades";
+    private static final String ARG_COLOR_SHAPE = "colorShape";
+    private static final String ARG_PRESETS_BUTTON_TEXT = "presetsButtonText";
+    private static final String ARG_CUSTOM_BUTTON_TEXT = "customButtonText";
+    private static final String ARG_SELECTED_BUTTON_TEXT = "selectedButtonText";
+    private static final String ARG_SHOW_NEGATIVE_BUTTON = "showNegativeButton";
 
     ColorPickerDialogListener colorPickerDialogListener;
     FrameLayout rootView;
@@ -116,22 +133,38 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
     LinearLayout shadesLayout;
     SeekBar transparencySeekBar;
     TextView transparencyPercText;
-    private int presetsButtonStringRes;
+
 
     // -- CUSTOM ---------------------------
     ColorPickerView colorPicker;
     ColorPanelView newColorPanel;
     EditText hexEditText;
     boolean showAlphaSlider;
+    private int presetsButtonStringRes;
     private boolean fromEditText;
     private int customButtonStringRes;
 
-    @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
-        if (colorPickerDialogListener == null && activity instanceof ColorPickerDialogListener) {
-            colorPickerDialogListener = (ColorPickerDialogListener) activity;
+    private final OnTouchListener onPickerTouchListener = new OnTouchListener() {
+        @Override
+        public boolean onTouch(View v, MotionEvent event) {
+            if (v != hexEditText && hexEditText.hasFocus()) {
+                hexEditText.clearFocus();
+                InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(hexEditText.getWindowToken(), 0);
+                hexEditText.clearFocus();
+                return true;
+            }
+            return false;
         }
+    };
+
+    /**
+     * Create a new Builder for creating a {@link ColorPickerDialog} instance
+     *
+     * @return The {@link Builder builder} to create the {@link ColorPickerDialog}.
+     */
+    public static Builder newBuilder() {
+        return new Builder();
     }
 
     @Override
@@ -148,7 +181,7 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
             dialogType = savedInstanceState.getInt(ARG_TYPE);
         }
 
-        rootView = new FrameLayout(getActivity());
+        rootView = new FrameLayout(requireActivity());
         if (dialogType == TYPE_CUSTOM) {
             rootView.addView(createPickerView());
         } else if (dialogType == TYPE_PRESETS) {
@@ -160,12 +193,12 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
             selectedButtonStringRes = R.string.cpv_select;
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity())
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity())
                 .setView(rootView)
                 .setPositiveButton(selectedButtonStringRes, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        colorPickerDialogListener.onColorSelected(dialogId, color);
+                        onColorSelected(color);
                     }
                 });
 
@@ -239,7 +272,7 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
     @Override
     public void onDismiss(DialogInterface dialog) {
         super.onDismiss(dialog);
-        colorPickerDialogListener.onDialogDismissed(dialogId);
+        onDialogDismissed();
     }
 
     @Override
@@ -250,7 +283,10 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
     }
 
     /**
-     * Set the callback
+     * Set the callback.
+     * <p/>
+     * Note: The preferred way to handle the callback is to have the calling Activity implement
+     * {@link ColorPickerDialogListener} as this will not survive an orientation change.
      *
      * @param colorPickerDialogListener The callback invoked when a color is selected or the dialog is dismissed.
      */
@@ -292,13 +328,13 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
             @Override
             public void onClick(View v) {
                 if (newColorPanel.getColor() == color) {
-                    colorPickerDialogListener.onColorSelected(dialogId, color);
+                    onColorSelected(color);
                     dismiss();
                 }
             }
         });
 
-        contentView.setOnTouchListener(this);
+        contentView.setOnTouchListener(onPickerTouchListener);
         colorPicker.setOnColorChangedListener(this);
         hexEditText.addTextChangedListener(this);
 
@@ -316,22 +352,12 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
     }
 
     @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        if (v != hexEditText && hexEditText.hasFocus()) {
-            hexEditText.clearFocus();
-            InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
-            imm.hideSoftInputFromWindow(hexEditText.getWindowToken(), 0);
-            hexEditText.clearFocus();
-            return true;
-        }
-        return false;
-    }
-
-    @Override
     public void onColorChanged(int newColor) {
         color = newColor;
-        newColorPanel.setColor(newColor);
-        if (!fromEditText) {
+        if (newColorPanel != null) {
+            newColorPanel.setColor(newColor);
+        }
+        if (!fromEditText && hexEditText != null) {
             setHex(newColor);
             if (hexEditText.hasFocus()) {
                 InputMethodManager imm = (InputMethodManager) getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
@@ -449,7 +475,8 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
             @Override
             public void onColorSelected(int newColor) {
                 if (color == newColor) {
-                    colorPickerDialogListener.onColorSelected(dialogId, color);
+                    // Double tab selects the color
+                    ColorPickerDialog.this.onColorSelected(color);
                     dismiss();
                     return;
                 }
@@ -489,6 +516,11 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
             }
         }
         presets = unshiftIfNotExists(presets, color);
+        int initialColor = getArguments().getInt(ARG_COLOR);
+        if (initialColor != color) {
+            // The user clicked a color and a configuration change occurred. Make sure the initial color is in the presets
+            presets = unshiftIfNotExists(presets, initialColor);
+        }
         if (isMaterialColors && presets.length == 19) {
             // Add black to have a total of 20 colors if the current color is in the material color palette
             presets = pushIfNotExists(presets, Color.argb(alpha, 0, 0, 0));
@@ -541,7 +573,7 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
                 @Override
                 public void onClick(View v) {
                     if (v.getTag() instanceof Boolean && (Boolean) v.getTag()) {
-                        colorPickerDialogListener.onColorSelected(dialogId, ColorPickerDialog.this.color);
+                        onColorSelected(ColorPickerDialog.this.color);
                         dismiss();
                         return; // already selected
                     }
@@ -552,8 +584,8 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
                         ColorPanelView cpv = (ColorPanelView) layout.findViewById(R.id.cpv_color_panel_view);
                         ImageView iv = (ImageView) layout.findViewById(R.id.cpv_color_image_view);
                         iv.setImageResource(cpv == v ? R.drawable.cpv_preset_checked : 0);
-                        if (cpv == v && ColorUtils.calculateLuminance(cpv.getColor()) >= 0.65 ||
-                                Color.alpha(cpv.getColor()) <= ALPHA_THRESHOLD) {
+                        if (cpv == v && ColorUtils.calculateLuminance(cpv.getColor()) >= 0.65
+                                || Color.alpha(cpv.getColor()) <= ALPHA_THRESHOLD) {
                             iv.setColorFilter(Color.BLACK, PorterDuff.Mode.SRC_IN);
                         } else {
                             iv.setColorFilter(null);
@@ -569,6 +601,32 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
                     return true;
                 }
             });
+        }
+    }
+
+    private void onColorSelected(int color) {
+        if (colorPickerDialogListener != null) {
+            Log.w(TAG, "Using deprecated listener which may be remove in future releases");
+            colorPickerDialogListener.onColorSelected(dialogId, color);
+            return;
+        }
+        Activity activity = getActivity();
+        if (activity instanceof ColorPickerDialogListener) {
+            ((ColorPickerDialogListener) activity).onColorSelected(dialogId, color);
+        } else {
+            throw new IllegalStateException("The activity must implement ColorPickerDialogListener");
+        }
+    }
+
+    private void onDialogDismissed() {
+        if (colorPickerDialogListener != null) {
+            Log.w(TAG, "Using deprecated listener which may be remove in future releases");
+            colorPickerDialogListener.onDialogDismissed(dialogId);
+            return;
+        }
+        Activity activity = getActivity();
+        if (activity instanceof ColorPickerDialogListener) {
+            ((ColorPickerDialogListener) activity).onDialogDismissed(dialogId);
         }
     }
 
@@ -721,8 +779,14 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
 
     // region Builder
 
+    @IntDef({TYPE_CUSTOM, TYPE_PRESETS})
+    public @interface DialogType {
+
+    }
+
     public static final class Builder {
 
+        ColorPickerDialogListener colorPickerDialogListener;
         @StringRes
         int dialogTitle = R.string.cpv_default_title;
         @StringRes
@@ -840,7 +904,8 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
         /**
          * Show the alpha slider
          *
-         * @param showAlphaSlider {@code true} to show the alpha slider. Currently only supported with the {@link ColorPickerView}.
+         * @param showAlphaSlider {@code true} to show the alpha slider. Currently only supported with the {@link
+         *                        ColorPickerView}.
          * @return This builder object for chaining method calls
          */
         public Builder setShowAlphaSlider(boolean showAlphaSlider) {
@@ -907,7 +972,7 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
          * Create the {@link ColorPickerDialog} instance.
          *
          * @return A new {@link ColorPickerDialog}.
-         * @see #show(Activity)
+         * @see #show(FragmentActivity)
          */
         public ColorPickerDialog create() {
             ColorPickerDialog dialog = new ColorPickerDialog();
@@ -935,17 +1000,12 @@ public class ColorPickerDialog extends DialogFragment implements OnTouchListener
          *
          * @param activity The current activity.
          */
-        public void show(Activity activity) {
-            create().show(activity.getFragmentManager(), "color-picker-dialog");
+        public void show(FragmentActivity activity) {
+            create().show(activity.getSupportFragmentManager(), "color-picker-dialog");
         }
 
-    }
-
-    @IntDef({TYPE_CUSTOM, TYPE_PRESETS})
-    public @interface DialogType {
 
     }
 
     // endregion
-
 }

@@ -16,26 +16,31 @@
 
 package com.jaredrummler.android.colorpicker.demo;
 
-import android.content.*;
-import android.graphics.*;
-import android.net.*;
-import android.os.*;
-import android.support.v7.app.*;
-import android.view.*;
-import android.widget.*;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.graphics.Color;
+import android.net.Uri;
+import android.os.Bundle;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.Toast;
 
-import com.jaredrummler.android.colorpicker.*;
+import com.jaredrummler.android.colorpicker.ColorPickerDialog;
+import com.jaredrummler.android.colorpicker.ColorPickerDialogListener;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity implements ColorPickerDialogListener {
 
-    // Give your color picker dialog unique IDs if you have multiple dialogs.
+    private static final String TAG = "MainActivity";// Give your color picker dialog unique IDs if you have multiple dialogs.
     private static final int DIALOG_ID = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (savedInstanceState == null) {
-            getFragmentManager().beginTransaction()
+            getSupportFragmentManager().beginTransaction()
                     .add(android.R.id.content, new DemoFragment())
                     .commit();
         }
@@ -73,6 +78,7 @@ public class MainActivity extends AppCompatActivity implements ColorPickerDialog
 
     @Override
     public void onColorSelected(int dialogId, int color) {
+        Log.d(TAG, "onColorSelected() called with: dialogId = [" + dialogId + "], color = [" + color + "]");
         switch (dialogId) {
             case DIALOG_ID:
                 // We got result from the dialog that is shown when clicking on the icon in the action bar.
@@ -83,7 +89,7 @@ public class MainActivity extends AppCompatActivity implements ColorPickerDialog
 
     @Override
     public void onDialogDismissed(int dialogId) {
-
+        Log.d(TAG, "onDialogDismissed() called with: dialogId = [" + dialogId + "]");
     }
 
 }
